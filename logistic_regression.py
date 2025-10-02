@@ -29,4 +29,3 @@ y_pred = log_reg.predict(X_test)
 
 print("LR Accuracy:", accuracy_score(y_test, y_pred)) 
 print("\nClassification Report:\n", classification_report(y_test, y_pred)) 
-
