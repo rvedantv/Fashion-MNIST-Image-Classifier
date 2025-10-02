@@ -69,10 +69,17 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 
-epochs = 10
+train_losses = []
+train_accuracies = []
+val_accuracies = []
+
+epochs = 30   # maybe increase to 15 or 20 to see curve shape
 for epoch in range(epochs):
     model.train()
     running_loss = 0.0
+    correct, total = 0, 0
+    
+    # Training
     for images, labels in train_loader:
         images, labels = images.to(device), labels.to(device)
 
@@ -81,17 +88,91 @@ for epoch in range(epochs):
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
+
         running_loss += loss.item()
-    print(f"Epoch [{epoch+1}/{epochs}], Loss: {running_loss/len(train_loader):.4f}")
+        _, predicted = torch.max(outputs, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+    
+    epoch_loss = running_loss / len(train_loader)
+    epoch_acc = 100 * correct / total
+    train_losses.append(epoch_loss)
+    train_accuracies.append(epoch_acc)
+
+    # Validation
+    model.eval()
+    correct, total = 0, 0
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    val_acc = 100 * correct / total
+    val_accuracies.append(val_acc)
+
+    print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}, Train Acc: {epoch_acc:.2f}%, Val Acc: {val_acc:.2f}%")
+
+
+# ========================== # EVALUATION # ========================== 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, classification_report
+
+# Fashion-MNIST class names
+class_names = [
+    "T-shirt/Top", "Trouser", "Pullover", "Dress", "Coat",
+    "Sandal", "Shirt", "Sneaker", "Bag", "Ankle Boot"
+]
+
+all_preds, all_labels = [], []
 
 model.eval()
-correct, total = 0, 0
 with torch.no_grad():
     for images, labels in test_loader:
         images, labels = images.to(device), labels.to(device)
         outputs = model(images)
         _, predicted = torch.max(outputs, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        all_preds.extend(predicted.cpu().numpy())
+        all_labels.extend(labels.cpu().numpy())
 
-print(f"CNN Test Accuracy: {100 * correct / total:.2f}%")
+# Accuracy
+correct = sum(p == l for p, l in zip(all_preds, all_labels))
+total = len(all_labels)
+print(f"\nCNN Test Accuracy: {100 * correct / total:.2f}%")
+
+# Classification Report
+print("\nClassification Report:")
+print(classification_report(all_labels, all_preds, target_names=class_names, digits=4))
+
+# Confusion Matrix
+cm = confusion_matrix(all_labels, all_preds)
+plt.figure(figsize=(10,8))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
+            xticklabels=class_names, yticklabels=class_names)
+plt.title("Confusion Matrix - CNN Classifier")
+plt.xlabel("Predicted Label")
+plt.ylabel("True Label")
+plt.show()
+
+# Training Loss Curve
+plt.figure(figsize=(8,5))
+plt.plot(range(1, epochs+1), train_losses, marker='o', label="Training Loss")
+plt.title("Training Loss Curve")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Accuracy Curves
+plt.figure(figsize=(8,5))
+plt.plot(range(1, epochs+1), train_accuracies, marker='o', label="Training Accuracy")
+plt.plot(range(1, epochs+1), val_accuracies, marker='s', color="red", label="Validation Accuracy")
+plt.title("Training vs Validation Accuracy")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy (%)")
+plt.legend()
+plt.grid(True)
+plt.show()
